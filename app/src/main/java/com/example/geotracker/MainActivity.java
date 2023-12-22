@@ -31,11 +31,13 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private FusedLocationProviderClient fusedLocationClient;
     private GoogleMap mMap;
 
+    private MainActivityViewModel viewModel;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        MainActivityViewModel viewModel = new ViewModelProvider(this).get(MainActivityViewModel.class);
+        viewModel = new ViewModelProvider(this).get(MainActivityViewModel.class);
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
@@ -69,8 +71,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             fusedLocationClient.getLastLocation()
                     .addOnSuccessListener(this, location -> {
                         if (location != null) {
-                            LatLng currentLocation = new LatLng(location.getLatitude(), location.getLongitude());
-                            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15));
+                            viewModel.setCurrentLocation(location);
                         }
                     });
         }
@@ -92,17 +93,6 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (ContextCompat.checkSelfPermission(this,
                 Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.getLastLocation()
-                    .addOnSuccessListener(this, location -> {
-                        if (location != null) {
-                            // Use the location object to get latitude, longitude, etc.
-                        }
-                    });
-            fusedLocationClient.getLastLocation().addOnSuccessListener(this, location -> {
-                if (location != null) {
-                    // Logic to handle location object
-                }
-            });
             startLocationUpdates();
         }
 

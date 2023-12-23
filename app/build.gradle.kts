@@ -9,7 +9,8 @@ android {
     defaultConfig {
         applicationId = "com.example.geotracker"
         minSdk = 32
-        targetSdk = 32
+        //noinspection EditedTargetSdkVersion
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -25,6 +26,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
+    }
+    dataBinding {
+        enable = true
     }
 }
 

@@ -3,9 +3,15 @@ package com.example.geotracker;
 import android.app.Service;
 import android.content.Intent;
 import android.location.Location;
+import android.os.Binder;
 import android.os.IBinder;
 import android.os.Looper;
+import android.util.Log;
+
 import androidx.annotation.Nullable;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
+
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -17,6 +23,15 @@ public class LocationTrackerService extends Service {
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
 
+    private MutableLiveData<Location> currentLocation = new MutableLiveData<>();
+
+    private Binder binder = new LocalBinder();
+
+    public class LocalBinder extends Binder {
+        LocationTrackerService getService() {
+            return LocationTrackerService.this;
+        }
+    }
     @Override
     public void onCreate() {
         super.onCreate();
@@ -25,29 +40,26 @@ public class LocationTrackerService extends Service {
         locationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
+
                 if (locationResult != null) {
+                        Log.d("LocationTrackerService", "Location result: " + locationResult.getLocations().toString());
                     for (Location location : locationResult.getLocations()) {
-                        // Handle each new location here
-                        // For example, broadcast it to your activity or store it
+                        currentLocation.postValue(location);
                     }
                 }
             }
         };
+        startLocationUpdates();
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        startLocationUpdates();
-        return START_STICKY;
-    }
 
     private void startLocationUpdates() {
         LocationRequest locationRequest = LocationRequest.create();
         locationRequest.setInterval(10000); // 10 seconds
         locationRequest.setFastestInterval(5000); // 5 seconds
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+                try {
 
-        try {
             fusedLocationClient.requestLocationUpdates(locationRequest,
                     locationCallback,
                     Looper.getMainLooper());
@@ -65,6 +77,10 @@ public class LocationTrackerService extends Service {
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        return binder;
+    }
+
+    public LiveData<Location> getCurrentLocation() {
+        return currentLocation;
     }
 }

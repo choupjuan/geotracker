@@ -3,16 +3,30 @@ package com.example.geotracker;
 import androidx.room.Dao;
 import androidx.room.Insert;
 import androidx.room.Query;
+import androidx.room.Update;
 
 import java.util.List;
 
 @Dao
 public interface JourneyDao {
     @Insert
-    void insert(Journey journey);
+    long insert(Journey journey);
+
+    @Update
+    void update(Journey journey);
+
+    @Insert
+    void insertLocationPoint(LocationPoint locationPoint);
+
+
 
     @Query("SELECT * FROM journies")
     List<Journey> getAllJournies();
 
-    // Additional queries as needed
+
+    @Query("SELECT * FROM journies WHERE id = :journeyId")
+    Journey getJourneyById(int journeyId);
+
+    @Query("SELECT * FROM location_points WHERE  journeyId = :journeyId")
+    List<LocationPoint> getLocationPointsForJourney(int journeyId);
 }

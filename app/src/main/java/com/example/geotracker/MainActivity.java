@@ -31,10 +31,16 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
+
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements OnMapReadyCallback {
 
     private static final int MY_PERMISSIONS_REQUEST_LOCATION = 99;
+
+
 
     private static final int REQUEST_CODE = 101;
     private FusedLocationProviderClient fusedLocationClient;
@@ -47,6 +53,12 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private Boolean isBound = false;
 
     private Boolean moved = false;
+
+    private Polyline journeyLine;
+
+    private PolylineOptions polylineOptions;
+
+    private boolean stillMoving = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,20 +81,30 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             startService();
             initMapFragment();
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
-                != PackageManager.PERMISSION_GRANTED) {
-            Log.d("MainActivity", "Requesting activity recognition permission");
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACTIVITY_RECOGNITION}, REQUEST_CODE);
-        }
+
 
 
         viewModel.getCurrentLocation().observe(this, location -> {
 
             if (location != null) {
+                LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
                 if (!moved) {
-                    LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+
                     mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15));
                 }
+                if(locationService.isMoving()){
+                    if(!stillMoving){
+                        startnewjourney();
+                        stillMoving = true;
+                    }else{
+                        List<LatLng> points = journeyLine.getPoints();
+                        points.add(latLng);
+                        journeyLine.setPoints(points);
+                    }
+                }else{
+                    stillMoving = false;
+                }
+
             }
         });
 
@@ -140,9 +162,19 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             setUpMap();
             Log.d("MainActivity", "Map set up");
-        } // else: Wait for permissions to be granted
+        }
+        polylineOptions = new PolylineOptions();
+        journeyLine = mMap.addPolyline(polylineOptions);
 
 
+    }
+
+    private void startnewjourney() {
+        if(journeyLine != null) {
+            journeyLine.remove();
+        }
+        polylineOptions = new PolylineOptions();
+        journeyLine = mMap.addPolyline(polylineOptions);
     }
 
 
@@ -178,8 +210,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         @Override
         public void onServiceConnected(android.content.ComponentName name, android.os.IBinder service) {
             LocationTrackerService.LocalBinder binder = (LocationTrackerService.LocalBinder) service;
-            locationService = binder.getService();
-
+            locationService = (LocationTrackerService) binder.getService();
 
             isBound = true;
 

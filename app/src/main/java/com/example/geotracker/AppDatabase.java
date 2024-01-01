@@ -5,10 +5,12 @@ import androidx.room.Database;
 import androidx.room.Room;
 import androidx.room.RoomDatabase;
 
-@Database(entities = {Journey.class, LocationPoint.class}, version = 1)
+@Database(entities = {Journey.class, LocationPoint.class,JourneyImage.class}, version = 1)
 public abstract class AppDatabase extends RoomDatabase {
     public abstract JourneyDao journeyDao();
     public abstract LocationPointDao locationPointDao();
+
+    public abstract JourneyImageDao journeyImageDao();
 
     private static volatile AppDatabase INSTANCE;
 

@@ -1,12 +1,16 @@
 package com.example.geotracker;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.Fragment;
 
 import android.os.Bundle;
+import android.view.View;
 
 public class JourneyDisplay extends AppCompatActivity {
 
     private int jid;
+
+    private Boolean secondFragment = false;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -29,6 +33,17 @@ public class JourneyDisplay extends AppCompatActivity {
 
         getSupportFragmentManager().beginTransaction()
                 .replace(R.id.fragmentContainerView2,fragment) // Replace 'fragment_container' with your container ID
+                .commit();
+    }
+
+    public void onSecondSwitch(View view) {
+
+        Bundle bundle = new Bundle();
+        bundle.putInt("JOURNEY_ID", jid);
+        imageFragment imageFragment = new imageFragment();
+        imageFragment.setArguments(bundle);
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.fragmentContainerView2,imageFragment) // Replace 'fragment_container' with your container ID
                 .commit();
     }
 }

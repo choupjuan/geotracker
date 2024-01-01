@@ -67,7 +67,7 @@ public class LocationTrackerService extends Service {
                     for (Location location : locationResult.getLocations()) {
                         if(lastLocation != null) {
                             float distance = location.distanceTo(lastLocation);
-                            long time = (location.getTime() - lastLocation.getTime())/1000;
+                            long time = (location.getTime()/1000) - (lastLocation.getTime()/1000);
 
                             float speed = distance / time;
 
@@ -84,8 +84,9 @@ public class LocationTrackerService extends Service {
                                 endJourney();
                             }
                         }
-                        currentLocation.postValue(location);
                         lastLocation = location;
+                        currentLocation.postValue(location);
+
                     }
                 }
             }
@@ -100,6 +101,7 @@ public class LocationTrackerService extends Service {
         locationPoint.longitude = location.getLongitude();
         locationPoint.timestamp = location.getTime();
         locationPoint.journeyId = currentJourney.id;
+
         Log.d("LocationTrackerService", "Saving location point");
         new Thread(() -> {
                 db.journeyDao().insertLocationPoint(locationPoint);
@@ -111,7 +113,7 @@ public class LocationTrackerService extends Service {
     private void startLocationUpdates() {
         LocationRequest locationRequest = LocationRequest.create();
         locationRequest.setInterval(10000); // 10 seconds
-        locationRequest.setFastestInterval(8000); // 5 seconds
+        locationRequest.setFastestInterval(5000); // 5 seconds
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
         try {
 
@@ -147,6 +149,7 @@ public class LocationTrackerService extends Service {
         isMoving = true;
         currentJourney = new Journey();
         currentJourney.startTime = System.currentTimeMillis();
+        currentJourney.endTime = currentJourney.startTime;
         if(speed > CYCLE_THRESHOLD) {
             currentJourney.type = "Cycle";
         }
@@ -159,6 +162,7 @@ public class LocationTrackerService extends Service {
         new Thread(() -> {
             long journeyId = db.journeyDao().insert(currentJourney);
             currentJourney.id = (int) journeyId;
+
         }).start();
     }
 

@@ -11,6 +11,8 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
+import android.widget.TextView;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -20,7 +22,9 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.PolylineOptions;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 
 public class displayFragment extends Fragment implements OnMapReadyCallback {
@@ -31,6 +35,13 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
     private Journey journey;
     private boolean dataIsReady;
     private List<LocationPoint> locationPoints;
+
+    private TextView journeyName;
+
+    private TextView timeTaken;
+
+    private EditText editTextNotes;
+
 
     public displayFragment() {
         // Required empty public constructor
@@ -63,7 +74,7 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
             Log.d("LocationPoints", locationPoints.toString());
             if(getActivity()!=null){
                 getActivity().runOnUiThread(() -> {
-
+                    displayInformation();
                     setLocationPoints(locationPoints);
 
 
@@ -73,7 +84,20 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
 
     }
 
+    private void displayInformation() {
+        journeyName.setText(journey.type);
+        timeTaken.setText(String.valueOf(formatRunTime(journey.endTime - journey.startTime)));
+        editTextNotes.setText(journey.notes);
 
+    }
+
+    private String formatRunTime(long runTimeMillis) {
+        long hours = TimeUnit.MILLISECONDS.toHours(runTimeMillis);
+        long minutes = TimeUnit.MILLISECONDS.toMinutes(runTimeMillis) % 60;
+        long seconds = TimeUnit.MILLISECONDS.toSeconds(runTimeMillis) % 60;
+
+        return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds);
+    }
 
     private void plotJourneyOnMap() {
 
@@ -98,6 +122,9 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        journeyName = view.findViewById(R.id.journeyType);
+        timeTaken = view.findViewById(R.id.journeyTime);
+        editTextNotes = view.findViewById(R.id.editTextNotes);
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map);
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
@@ -110,6 +137,18 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
             plotJourneyOnMap();
         }
     }
+
+    private void saveJourney() {
+        Log.d("Saving", "Saving");
+        String notes = editTextNotes.getText().toString();
+        journey.notes = notes;
+
+        new Thread(() -> {
+            AppDatabase db = Room.databaseBuilder(requireActivity(),
+                    AppDatabase.class, "Journey-Database").build();
+            db.journeyDao().update(journey);
+        }).start();
+    }
     @Override
     public void onMapReady(@NonNull GoogleMap googleMap) {
         mMap = googleMap;
@@ -119,6 +158,12 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
 
     }
 
+    @Override
+    public void onPause() {
+        super.onPause();
+        Log.d("Pause", "Pause");
+        saveJourney();
+    }
     @Override
     public void onDestroy() {
         super.onDestroy();

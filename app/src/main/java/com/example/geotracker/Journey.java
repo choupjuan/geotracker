@@ -14,6 +14,8 @@ public class Journey {
     public long startTime; // Start time of the journey
     public long endTime; // End time of the journey
 
+    public String notes; // Notes about the journey
+
     public int getId() {
         return id;
     }

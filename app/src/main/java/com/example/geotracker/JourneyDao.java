@@ -18,6 +18,9 @@ public interface JourneyDao {
     @Insert
     void insertLocationPoint(LocationPoint locationPoint);
 
+    @Insert
+    void insertJourneyImage(JourneyImage journeyImage);
+
 
 
     @Query("SELECT * FROM journies")
@@ -29,4 +32,9 @@ public interface JourneyDao {
 
     @Query("SELECT * FROM location_points WHERE  journeyId = :journeyId")
     List<LocationPoint> getLocationPointsForJourney(int journeyId);
+
+    @Query("SELECT * FROM JourneyImage WHERE journeyId = :journeyId")
+    List<JourneyImage> getJourneyImagesForJourney(int journeyId);
+
+
 }

@@ -1,6 +1,11 @@
 package com.example.geotracker;
 
+import static android.app.PendingIntent.getActivity;
+
+import static java.security.AccessController.getContext;
+
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -13,6 +18,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.Build;
 import android.os.Bundle;
 import android.Manifest;
 import android.os.Looper;
@@ -60,9 +66,12 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private boolean stillMoving = false;
 
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+
         setContentView(R.layout.activity_main);
         viewModel = new ViewModelProvider(this).get(MainActivityViewModel.class);
 
@@ -82,6 +91,13 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             initMapFragment();
         }
 
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.READ_MEDIA_IMAGES},
+                    0);
+        }
 
 
         viewModel.getCurrentLocation().observe(this, location -> {

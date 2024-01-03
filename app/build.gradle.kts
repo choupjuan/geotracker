@@ -10,7 +10,7 @@ android {
         applicationId = "com.example.geotracker"
         minSdk = 32
         //noinspection EditedTargetSdkVersion
-        targetSdk = 34
+        targetSdk = 33
         versionCode = 1
         versionName = "1.0"
 
@@ -46,4 +46,5 @@ dependencies {
     annotationProcessor("androidx.room:room-compiler:2.6.1")
     implementation("androidx.work:work-runtime:2.9.0")
     implementation("com.google.code.gson:gson:2.9.0")
+    implementation ("androidx.work:work-runtime-ktx:2.9.0")
 }

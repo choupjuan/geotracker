@@ -1,6 +1,7 @@
 package com.example.geotracker;
 
 import android.content.Context;
+import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -11,37 +12,39 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.List;
 
-public class ImageAdapter extends RecyclerView.Adapter<ImageAdapter.ViewHolder> {
-    private List<Integer> imageResIds;
+public class ImageAdapter extends RecyclerView.Adapter<ImageAdapter.ImageViewHolder> {
+    private Context context;
+    private List<Uri> imageUris;
 
-    public ImageAdapter(List<Integer> imageResIds) {
-        this.imageResIds = imageResIds;
+    public ImageAdapter(Context context, List<Uri> imageUris) {
+        this.context = context;
+        this.imageUris = imageUris;
     }
 
     @NonNull
     @Override
-    public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+    public ImageViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_image, parent, false);
-        return new ViewHolder(view);
+        return new ImageViewHolder(view);
     }
 
     @Override
-    public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        int imageResId = imageResIds.get(position);
-        holder.imageView.setImageResource(imageResId);
+    public void onBindViewHolder(@NonNull ImageViewHolder holder, int position) {
+        Uri imageUri = imageUris.get(position);
+        holder.imageView.setImageURI(imageUri);
     }
 
     @Override
     public int getItemCount() {
-        return imageResIds.size();
+        return imageUris.size();
     }
 
-    public static class ViewHolder extends RecyclerView.ViewHolder {
+    public static class ImageViewHolder extends RecyclerView.ViewHolder {
         ImageView imageView;
 
-        public ViewHolder(View view) {
-            super(view);
-            imageView = view.findViewById(R.id.imageViewItem);
+        public ImageViewHolder(View itemView) {
+            super(itemView);
+            imageView = itemView.findViewById(R.id.imageViewItem);
         }
     }
 }

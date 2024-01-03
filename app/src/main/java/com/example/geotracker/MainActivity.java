@@ -9,33 +9,28 @@ import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.room.Room;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
-import android.location.Location;
 import android.os.Build;
 import android.os.Bundle;
 import android.Manifest;
-import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationCallback;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
@@ -91,13 +86,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             initMapFragment();
         }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED) {
 
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.READ_MEDIA_IMAGES},
-                    0);
-        }
 
 
         viewModel.getCurrentLocation().observe(this, location -> {
@@ -150,6 +139,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     @SuppressLint("MissingPermission")
     private void startService() {
         Log.d("MainActivity", "Starting service");
+        Intent intent1 = new Intent(this, LocationTrackerService.class);
+        startService(intent1);
 
         if (!isBound) {
             Intent intent = new Intent(this, LocationTrackerService.class);
@@ -181,10 +172,56 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
         polylineOptions = new PolylineOptions();
         journeyLine = mMap.addPolyline(polylineOptions);
+        googleMap.setOnMapLongClickListener(this::onMapLongClick);
+        googleMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(@NonNull Marker marker) {
+                removeFromDatabase(Math.toIntExact((long)marker.getTag()));
+                marker.remove();
+                
+                return true;
+            }
+        });
+        loadRemindersAndShowOnMap();
 
 
     }
 
+    private void removeFromDatabase(int id) {
+        Log.d("MainActivity", "Removing from database");
+        Log.d("MainActivity", String.valueOf(id));
+        new Thread(() -> {
+            AppDatabase db = Room.databaseBuilder(getApplicationContext(),
+                    AppDatabase.class, "Journey-Database").build();
+            db.locationReminderDao().deleteById(id);
+        }).start();
+    }
+
+    private void onMapLongClick(LatLng latLng) {
+        addLocationReminder(latLng);
+    }
+
+    private void addLocationReminder(LatLng latLng) {
+        Marker marker = mMap.addMarker(new MarkerOptions().position(latLng));
+        LocationReminder reminder = new LocationReminder();
+
+
+        reminder.latitude = latLng.latitude;
+        reminder.longitude = latLng.longitude;
+
+
+        new Thread(() -> {
+            AppDatabase db = Room.databaseBuilder(getApplicationContext(),
+                    AppDatabase.class, "Journey-Database").build();
+            long rowId = db.locationReminderDao().insertReminder(reminder);
+            runOnUiThread(() -> {
+                marker.setTag(rowId);
+                locationService.setupGeofences();
+            });
+
+        }).start();
+
+    }
     private void startnewjourney() {
         if(journeyLine != null) {
             journeyLine.remove();
@@ -246,4 +283,25 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         }
     };
+
+    private void loadRemindersAndShowOnMap() {
+        new Thread(() -> {
+            AppDatabase db = Room.databaseBuilder(getApplicationContext(),
+                    AppDatabase.class, "Journey-Database").build();
+            List<LocationReminder> reminders = db.locationReminderDao().getAllReminders();
+
+            // Now that you have your reminders, display them on the map
+            runOnUiThread(() -> showRemindersOnMap(reminders));
+        }).start();
+    }
+
+    private void showRemindersOnMap(List<LocationReminder> reminders) {
+        if (mMap != null) {
+            for (LocationReminder reminder : reminders) {
+                LatLng position = new LatLng(reminder.latitude, reminder.longitude);
+                Marker marker = mMap.addMarker(new MarkerOptions().position(position));
+                marker.setTag((long)reminder.id);
+            }
+        }
+    }
 }

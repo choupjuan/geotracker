@@ -1,24 +1,38 @@
 package com.example.geotracker;
 
 import android.annotation.SuppressLint;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.room.Room;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.Geofence;
+import com.google.android.gms.location.GeofencingClient;
+import com.google.android.gms.location.GeofencingRequest;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class LocationTrackerService extends Service {
 
@@ -36,6 +50,8 @@ public class LocationTrackerService extends Service {
 
     private MutableLiveData<Location> currentLocation = new MutableLiveData<>();
 
+    private PendingIntent geofencePendingIntent;
+
     private final Binder binder = new LocalBinder();
 
     private Boolean isMoving = false;
@@ -44,6 +60,8 @@ public class LocationTrackerService extends Service {
     private Journey currentJourney;
 
     private AppDatabase db;
+
+    private GeofencingClient geofencingClient;
 
     public class LocalBinder extends Binder {
         LocationTrackerService getService() {
@@ -55,6 +73,7 @@ public class LocationTrackerService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        geofencingClient = LocationServices.getGeofencingClient(this);
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         db = Room.databaseBuilder(getApplicationContext(),
                 AppDatabase.class, "Journey-Database").build();
@@ -75,23 +94,28 @@ public class LocationTrackerService extends Service {
                                 Log.d("LocationTrackerService", "Speed: " + speed + "m/s, Distance: " + distance + "m, Time: " + time + "s");
                                 if(!isMoving){
                                     startJourney(speed);
+                                    lastLocation = location;
                                 }
                                 else{
                                     recordLocation(location);
+                                    lastLocation = location;
                                 }
                             } else {
                                 isMoving = false;
                                 endJourney();
+                                lastLocation = null;
                             }
+                        }else{
+                            lastLocation = location;
                         }
-                        lastLocation = location;
+
                         currentLocation.postValue(location);
 
                     }
                 }
             }
         };
-        startLocationUpdates();
+
 
     }
 
@@ -108,6 +132,101 @@ public class LocationTrackerService extends Service {
                 currentJourney.endTime = locationPoint.timestamp;
                 db.journeyDao().update(currentJourney);
         }).start();
+    }
+
+    public void setupGeofences() {
+        Log.d("LocationTrackerService", "Setting up geofences");
+        new Thread(() -> {
+            AppDatabase db = Room.databaseBuilder(getApplicationContext(),
+                    AppDatabase.class, "Journey-Database").build();
+            List<LocationReminder> reminders = db.locationReminderDao().getAllReminders();
+
+            List<Geofence> geofenceList = createGeofenceList(reminders);
+            addGeofencesToClient(geofenceList);
+        }).start();
+    }
+
+    @SuppressLint("MissingPermission")
+    private void addGeofencesToClient(List<Geofence> geofenceList) {
+        if (geofenceList.isEmpty()) {
+            Log.d("LocationTrackerService", "No geofences to add");
+            return; // No geofences to add
+        }
+        
+
+        GeofencingRequest.Builder builder = new GeofencingRequest.Builder();
+        builder.setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER);
+        builder.addGeofences(geofenceList);
+
+        geofencingClient.addGeofences(builder.build(), getGeofencePendingIntent())
+                .addOnSuccessListener(aVoid -> {
+                    // Handle success
+                })
+                .addOnFailureListener(e -> {
+                    // Handle failure
+                });
+    }
+
+    private PendingIntent getGeofencePendingIntent() {
+        if (geofencePendingIntent != null) {
+            return geofencePendingIntent;
+        }
+        Intent intent = new Intent(this, GeofenceBroadcastReceiver.class);
+        geofencePendingIntent = PendingIntent.getBroadcast(this, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        return geofencePendingIntent;
+    }
+
+    private List<Geofence> createGeofenceList(List<LocationReminder> reminders) {
+        List<Geofence> geofenceList = new ArrayList<>();
+        for (LocationReminder reminder : reminders) {
+            geofenceList.add(new Geofence.Builder()
+                    .setRequestId(String.valueOf(reminder.id))
+                    .setCircularRegion(
+                            reminder.latitude,
+                            reminder.longitude,
+                            100)
+                    .setExpirationDuration(Geofence.NEVER_EXPIRE)
+                    .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER|Geofence.GEOFENCE_TRANSITION_EXIT)
+                    .build());
+        }
+        return geofenceList;
+    }
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        createNotificationChannel();
+        Intent notificationIntent = new Intent(this, MainActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this,
+                0, notificationIntent, PendingIntent.FLAG_ONE_SHOT| PendingIntent.FLAG_IMMUTABLE);
+
+        Notification notification = new NotificationCompat.Builder(this, "stuff")
+                .setContentTitle("Location Service")
+                .setContentText("Tracking location updates")
+                .setSmallIcon(R.drawable.ic_launcher_background)
+                .setContentIntent(pendingIntent)
+                .build();
+
+        Log.d("LocationTrackerService", "Starting foreground service");
+        startForeground(1, notification);
+
+        // Start location updates
+        // ...
+        startLocationUpdates();
+        setupGeofences();
+
+        return START_NOT_STICKY;
+    }
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel serviceChannel = new NotificationChannel(
+                    "stuff",
+                    "Foreground Service Channel",
+                    NotificationManager.IMPORTANCE_DEFAULT
+            );
+
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            manager.createNotificationChannel(serviceChannel);
+        }
     }
 
     private void startLocationUpdates() {

@@ -5,6 +5,8 @@ import android.os.Bundle;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModel;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.room.Room;
 
 import android.util.Log;
@@ -42,6 +44,7 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
 
     private EditText editTextNotes;
 
+    private JourneyDisplayViewModel journeyDisplayViewModel;
 
     public displayFragment() {
         // Required empty public constructor
@@ -49,40 +52,37 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        journeyDisplayViewModel = new ViewModelProvider(this).get(JourneyDisplayViewModel.class);
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map);
+
+        if(getArguments()!=null) {
+            journeyId = getArguments().getInt("JOURNEY_ID");
+            journeyDisplayViewModel.fetchJourney(journeyId);
+            journeyDisplayViewModel.fetchLocationPointsForJourney(journeyId);
+            journeyDisplayViewModel.setIsDataReady();
+        }
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
-        if(getArguments() != null){
-            journeyId = getArguments().getInt("JOURNEY_ID");
-            loadDetails();
+
+
+        if(journeyDisplayViewModel.isDataReady()) {
+            journeyDisplayViewModel.getJourney().observe(this, journeyData -> {
+                journey = journeyData;
+                displayInformation();
+            });
+            journeyDisplayViewModel.getLocationPointLiveData().observe(this, locationData -> {
+                locationPoints = locationData;
+
+                setLocationPoints(locationPoints);
+            });
         }
+
+
     }
 
-    private void loadDetails() {
-// Load the journey details from the database
-        // Display the journey details on the map
-        // Display the journey details in the text views
-        new Thread(() -> {
-
-            AppDatabase db = Room.databaseBuilder(requireActivity(),
-                    AppDatabase.class, "Journey-Database").build();
-            journey = db.journeyDao().getJourneyById(journeyId);
-
-            Log.d("Journey", journey.toString());
-            List<LocationPoint> locationPoints = db.journeyDao().getLocationPointsForJourney(journeyId);
-            Log.d("LocationPoints", locationPoints.toString());
-            if(getActivity()!=null){
-                getActivity().runOnUiThread(() -> {
-                    displayInformation();
-                    setLocationPoints(locationPoints);
-
-
-                });
-            }
-        }).start();
-
-    }
+    
 
     private void displayInformation() {
         journeyName.setText(journey.type);
@@ -142,16 +142,12 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
         Log.d("Saving", "Saving");
         String notes = editTextNotes.getText().toString();
         journey.notes = notes;
-
-        new Thread(() -> {
-            AppDatabase db = Room.databaseBuilder(requireActivity(),
-                    AppDatabase.class, "Journey-Database").build();
-            db.journeyDao().update(journey);
-        }).start();
+        journeyDisplayViewModel.update(journey);
     }
     @Override
     public void onMapReady(@NonNull GoogleMap googleMap) {
         mMap = googleMap;
+
         if (locationPoints != null) {
             plotJourneyOnMap();
         }
@@ -160,6 +156,7 @@ public class displayFragment extends Fragment implements OnMapReadyCallback {
 
     @Override
     public void onPause() {
+
         super.onPause();
         Log.d("Pause", "Pause");
         saveJourney();

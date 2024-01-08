@@ -61,6 +61,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private boolean stillMoving = false;
 
+    private List<LocationReminder> locationReminders;
+
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,9 +84,40 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                     new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
                     MY_PERMISSIONS_REQUEST_LOCATION);
         } else {
-            startService();
+
             initMapFragment();
         }
+
+        if(ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)
+        != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_CODE);
+        }
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.READ_MEDIA_IMAGES},
+                    0);
+        }
+
+
+        if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_NOTIFICATION_POLICY},
+                    5);}
+
+        if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION},
+                    5);}
+        else{
+            startService();
+        }
+
 
 
 
@@ -113,13 +146,18 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             }
         });
 
+        viewModel.getLocationReminders().observe(this, locationReminders1 -> {
+            locationReminders = locationReminders1;
+            showRemindersOnMap(locationReminders);
+        });
+
 
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == MY_PERMISSIONS_REQUEST_LOCATION) {
+        if (requestCode == 5) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission was granted, start your functionality
                 startService();
@@ -133,6 +171,19 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private void handlePermissionDenial() {
         return;
+    }
+
+    public void onStopClick(View view) {
+        if (isBound) {
+            unbindService(connection);
+            isBound = false;
+        }
+        Intent intent = new Intent(this, LocationTrackerService.class);
+        stopService(intent);
+    }
+
+    public void onStartClick(View view) {
+        startService();
     }
 
 
@@ -162,6 +213,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         startActivity(intent);
     }
 
+    public void onStatsClick(View view) {
+        Intent intent = new Intent(this, StatActivity.class);
+        startActivity(intent);
+    }
     @Override
     public void onMapReady(@NonNull GoogleMap googleMap) {
         mMap = googleMap;
@@ -182,7 +237,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                 return true;
             }
         });
-        loadRemindersAndShowOnMap();
+
 
 
     }
@@ -190,11 +245,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private void removeFromDatabase(int id) {
         Log.d("MainActivity", "Removing from database");
         Log.d("MainActivity", String.valueOf(id));
-        new Thread(() -> {
-            AppDatabase db = Room.databaseBuilder(getApplicationContext(),
-                    AppDatabase.class, "Journey-Database").build();
-            db.locationReminderDao().deleteById(id);
-        }).start();
+        viewModel.removeMarker(id);
     }
 
     private void onMapLongClick(LatLng latLng) {
@@ -208,18 +259,19 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         reminder.latitude = latLng.latitude;
         reminder.longitude = latLng.longitude;
+        viewModel.insertLocationReminder(reminder, new JourneyRepository.Callback<Long>() {
+            @Override
+            public void onResult(Long result) {
+                runOnUiThread(() -> {
+                        marker.setTag(result);
+                        locationService.setupGeofences();
 
-
-        new Thread(() -> {
-            AppDatabase db = Room.databaseBuilder(getApplicationContext(),
-                    AppDatabase.class, "Journey-Database").build();
-            long rowId = db.locationReminderDao().insertReminder(reminder);
-            runOnUiThread(() -> {
-                marker.setTag(rowId);
-                locationService.setupGeofences();
             });
 
-        }).start();
+
+            }
+        });
+
 
     }
     private void startnewjourney() {
@@ -257,6 +309,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             unbindService(connection);
             isBound = false;
         }
+        stopService(new Intent(this, LocationTrackerService.class));
     }
 
     private ServiceConnection connection = new ServiceConnection() {
@@ -284,16 +337,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     };
 
-    private void loadRemindersAndShowOnMap() {
-        new Thread(() -> {
-            AppDatabase db = Room.databaseBuilder(getApplicationContext(),
-                    AppDatabase.class, "Journey-Database").build();
-            List<LocationReminder> reminders = db.locationReminderDao().getAllReminders();
 
-            // Now that you have your reminders, display them on the map
-            runOnUiThread(() -> showRemindersOnMap(reminders));
-        }).start();
-    }
 
     private void showRemindersOnMap(List<LocationReminder> reminders) {
         if (mMap != null) {

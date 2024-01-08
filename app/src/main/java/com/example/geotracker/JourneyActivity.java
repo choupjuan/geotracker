@@ -1,6 +1,7 @@
 package com.example.geotracker;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.room.Room;
 
 import android.content.Intent;
@@ -20,6 +21,8 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 public class JourneyActivity extends AppCompatActivity {
+
+    private JourneyActivityViewModel viewModel;
     private ListView lvJourneys;
     private ArrayAdapter<String> adapter;
     private List<String> journeyDescriptions;
@@ -30,12 +33,13 @@ public class JourneyActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_journey);
 
+        viewModel = new ViewModelProvider(this).get(JourneyActivityViewModel.class);
         lvJourneys = findViewById(R.id.listView);
         journeyDescriptions = new ArrayList<>();
         adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, journeyDescriptions);
         lvJourneys.setAdapter(adapter);
 
-        loadJourneys();
+
 
         lvJourneys.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -44,6 +48,12 @@ public class JourneyActivity extends AppCompatActivity {
                 openJourneyDetailsActivity(selectedJourney.getId());
             }
         });
+
+        viewModel.getJourneyLiveData().observe(this, journeys1 -> {
+            journeys = journeys1;
+            loadJourneys();
+        });
+
     }
 
     private void openJourneyDetailsActivity(int id) {
@@ -53,23 +63,14 @@ public class JourneyActivity extends AppCompatActivity {
     }
 
     private void loadJourneys() {
-        new Thread(() -> {
-            AppDatabase db = Room.databaseBuilder(getApplicationContext(),
-                    AppDatabase.class, "Journey-Database").build();
-            journeys = db.journeyDao().getAllJournies(); // Assuming you have a method to get all journeys
-
-            List<String> descriptions = new ArrayList<>();
-            for (Journey journey : journeys) {
-                String description = formatJourney(journey);
-                descriptions.add(description);
-            }
-
-            runOnUiThread(() -> {
-                journeyDescriptions.clear();
-                journeyDescriptions.addAll(descriptions);
-                adapter.notifyDataSetChanged();
-            });
-        }).start();
+        List<String> descriptions = new ArrayList<>();
+        for (Journey journey : journeys) {
+            String description = formatJourney(journey);
+            descriptions.add(description);
+        }
+        journeyDescriptions.clear();
+        journeyDescriptions.addAll(descriptions);
+        adapter.notifyDataSetChanged();
     }
 
     private String formatJourney(Journey journey) {

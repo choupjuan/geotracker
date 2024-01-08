@@ -1,9 +1,18 @@
 package com.example.geotracker;
 
+import static androidx.core.content.ContextCompat.getSystemService;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.util.Log;
+
+import androidx.core.app.NotificationCompat;
+import androidx.room.Room;
 
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofencingEvent;
@@ -33,10 +42,25 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
         }
     }
 
+
+
     private void sendNotification(Context context, String requestId) {
         Log.d("GeofenceBroadcast", "sendNotification: " + requestId);
-        Intent intent = new Intent(ACTION_GEOFENCE_TRIGGERED);
-        intent.putExtra(EXTRA_REQUEST_ID, requestId);
-        context.sendBroadcast(intent);
+        NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+        Notification notification = new NotificationCompat.Builder(context, "geofence_channel_id")
+                .setContentTitle("Geofence Alert")
+                .setContentText("Geofence event triggered!")
+                .setSmallIcon(R.drawable.ic_launcher_foreground) // Replace with your notification icon
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .build();
+
+        notificationManager.notify(5, notification);
+        new Thread(() -> {
+            AppDatabase db = Room.databaseBuilder(context,
+                    AppDatabase.class, "Journey-Database").build();
+            Journey journey = db.journeyDao().getLatestJourney();
+            db.journeyDao().incrementGeofenceTriggerCount(journey.getId());
+        }).start();
     }
 }

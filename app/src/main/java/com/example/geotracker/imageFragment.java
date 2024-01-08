@@ -8,6 +8,7 @@ import android.os.Bundle;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.room.Room;
@@ -32,6 +33,9 @@ public class imageFragment extends Fragment {
 
     private ImageAdapter imageAdapter;
 
+    private JourneyDisplayViewModel journeyDisplayViewModel;
+    private List<JourneyImage> images;
+
     private int journeyId;
 
     @Nullable
@@ -39,14 +43,18 @@ public class imageFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_image, container, false);
 
+        journeyDisplayViewModel = new ViewModelProvider(this).get(JourneyDisplayViewModel.class);
         recyclerViewImages = view.findViewById(R.id.recyclerView);
         recyclerViewImages.setLayoutManager(new LinearLayoutManager(getContext()));
         imageAdapter = new ImageAdapter(getContext(), new ArrayList<>());
+
         recyclerViewImages.setAdapter(imageAdapter);
 
 
-        journeyId = requireArguments().getInt("JOURNEY_ID");
 
+        journeyId = requireArguments().getInt("JOURNEY_ID");
+        journeyDisplayViewModel.fetchJourney(journeyId);
+        journeyDisplayViewModel.setIsDataReady();
 
 
         Button button = view.findViewById(R.id.imageButton);
@@ -56,7 +64,13 @@ public class imageFragment extends Fragment {
                 selectImage();
             }
         });
-        displayImages();
+        if(journeyDisplayViewModel.isDataReady()) {
+            journeyDisplayViewModel.getJourneyImageLiveData().observe(getViewLifecycleOwner(), journeyImages -> {
+                images = journeyImages;
+                Log.d("ImageFragment", "Images: " + images.toString());
+                displayImages();
+            });
+        }
         return view;
     }
 
@@ -93,7 +107,7 @@ public class imageFragment extends Fragment {
                 // Handle exception
             }
             saveImageUriToDatabase(selectedImage);
-            displayImages();
+
 
         }
     }
@@ -102,33 +116,20 @@ public class imageFragment extends Fragment {
         JourneyImage journeyImage = new JourneyImage();
         journeyImage.imageUri = selectedImage.toString();
         journeyImage.journeyId = journeyId;
-
-
-        new Thread(() -> {
-            AppDatabase db = Room.databaseBuilder(requireContext(),
-                    AppDatabase.class, "Journey-Database").build();
-            db.journeyImageDao().insert(journeyImage);
-        }).start();
+        journeyDisplayViewModel.insertPicture(journeyImage);
     }
 
     private void displayImages() {
-        new Thread(() -> {
-            AppDatabase db = Room.databaseBuilder(getContext(), AppDatabase.class, "Journey-Database").build();
-            List<JourneyImage> images = db.journeyDao().getJourneyImagesForJourney(journeyId);
-            List<Uri> uris = new ArrayList<>();
 
-            for (JourneyImage journeyImage : images) {
-                if (journeyImage.imageUri != null && !journeyImage.imageUri.isEmpty()) {
-                    uris.add(Uri.parse(journeyImage.imageUri));
-                }
+        List<Uri> uris = new ArrayList<>();
+
+        for (JourneyImage journeyImage : images) {
+            if (journeyImage.imageUri != null && !journeyImage.imageUri.isEmpty()) {
+                uris.add(Uri.parse(journeyImage.imageUri));
             }
-            Log.d("ImageFragment", "Displaying images: " + uris.toString());
-
-
-            getActivity().runOnUiThread(() -> {
-                imageAdapter = new ImageAdapter(getContext(), uris);
-                recyclerViewImages.setAdapter(imageAdapter);
-            });
-        }).start();
+        }
+        Log.d("ImageFragment", "Displaying images: " + uris.toString());
+        imageAdapter = new ImageAdapter(getContext(), uris);
+        recyclerViewImages.setAdapter(imageAdapter);
     }
 }

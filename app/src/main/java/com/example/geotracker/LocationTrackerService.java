@@ -7,7 +7,6 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Binder;
 import android.os.Build;
@@ -17,7 +16,6 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
-import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.room.Room;
@@ -37,12 +35,12 @@ import java.util.List;
 public class LocationTrackerService extends Service {
 
     private static final float SPEED_THRESHOLD = 1.0f; // e.g., meters/second
-    private static final float DISTANCE_THRESHOLD = 11f; // e.g., meters
-    private static final long TIME_THRESHOLD = 10000; // e.g., milliseconds
+    private static final float DISTANCE_THRESHOLD = 10f; // e.g., meters
+    private static final long TIME_THRESHOLD = 1000000; // e.g., milliseconds
 
     private static final float CYCLE_THRESHOLD = 6.0f; // e.g., meters/second
 
-    private static final float WALKING_THRESHOLD = 1.0f; // e.g., meters/second
+
 
     private static final float RUNNING_THRESHOLD = 3.0f; // e.g., meters/second
     private FusedLocationProviderClient fusedLocationClient;
@@ -73,6 +71,7 @@ public class LocationTrackerService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        createNotificationChannel();
         geofencingClient = LocationServices.getGeofencingClient(this);
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         db = Room.databaseBuilder(getApplicationContext(),
@@ -93,11 +92,11 @@ public class LocationTrackerService extends Service {
                             if (speed > SPEED_THRESHOLD && time < TIME_THRESHOLD && distance > DISTANCE_THRESHOLD){
                                 Log.d("LocationTrackerService", "Speed: " + speed + "m/s, Distance: " + distance + "m, Time: " + time + "s");
                                 if(!isMoving){
-                                    startJourney(speed);
+                                    startJourney(speed,distance,location.getTime());
                                     lastLocation = location;
                                 }
                                 else{
-                                    recordLocation(location);
+                                    recordLocation(location,distance);
                                     lastLocation = location;
                                 }
                             } else {
@@ -119,7 +118,7 @@ public class LocationTrackerService extends Service {
 
     }
 
-    private void recordLocation(Location location) {
+    private void recordLocation(Location location, float distance) {
         LocationPoint locationPoint = new LocationPoint();
         locationPoint.latitude = location.getLatitude();
         locationPoint.longitude = location.getLongitude();
@@ -128,9 +127,13 @@ public class LocationTrackerService extends Service {
 
         Log.d("LocationTrackerService", "Saving location point");
         new Thread(() -> {
-                db.journeyDao().insertLocationPoint(locationPoint);
-                currentJourney.endTime = locationPoint.timestamp;
-                db.journeyDao().update(currentJourney);
+
+            db.journeyDao().insertLocationPoint(locationPoint);
+            currentJourney = db.journeyDao().getLatestJourney();
+            currentJourney.geofenceTriggerCount = currentJourney.geofenceTriggerCount;
+            currentJourney.distance = currentJourney.distance + distance;
+            currentJourney.endTime = locationPoint.timestamp;
+            db.journeyDao().update(currentJourney);
         }).start();
     }
 
@@ -139,7 +142,7 @@ public class LocationTrackerService extends Service {
         new Thread(() -> {
             AppDatabase db = Room.databaseBuilder(getApplicationContext(),
                     AppDatabase.class, "Journey-Database").build();
-            List<LocationReminder> reminders = db.locationReminderDao().getAllReminders();
+            List<LocationReminder> reminders = db.locationReminderDao().getAllRemindersSync();
 
             List<Geofence> geofenceList = createGeofenceList(reminders);
             addGeofencesToClient(geofenceList);
@@ -160,10 +163,10 @@ public class LocationTrackerService extends Service {
 
         geofencingClient.addGeofences(builder.build(), getGeofencePendingIntent())
                 .addOnSuccessListener(aVoid -> {
-                    // Handle success
+                    Log.d("LocationTrackerService", "Successfully added geofences");
                 })
                 .addOnFailureListener(e -> {
-                    // Handle failure
+                    Log.d("LocationTrackerService", "Failed to add geofences: " + e.getMessage());
                 });
     }
 
@@ -173,12 +176,14 @@ public class LocationTrackerService extends Service {
         }
         Intent intent = new Intent(this, GeofenceBroadcastReceiver.class);
         geofencePendingIntent = PendingIntent.getBroadcast(this, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+                PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);
         return geofencePendingIntent;
     }
 
     private List<Geofence> createGeofenceList(List<LocationReminder> reminders) {
         List<Geofence> geofenceList = new ArrayList<>();
+        Log.d("LocationTrackerService", "Creating geofence list");
+
         for (LocationReminder reminder : reminders) {
             geofenceList.add(new Geofence.Builder()
                     .setRequestId(String.valueOf(reminder.id))
@@ -190,6 +195,7 @@ public class LocationTrackerService extends Service {
                     .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER|Geofence.GEOFENCE_TRANSITION_EXIT)
                     .build());
         }
+        Log.d("LocationTrackerService", geofenceList.toString());
         return geofenceList;
     }
     @Override
@@ -199,15 +205,18 @@ public class LocationTrackerService extends Service {
         PendingIntent pendingIntent = PendingIntent.getActivity(this,
                 0, notificationIntent, PendingIntent.FLAG_ONE_SHOT| PendingIntent.FLAG_IMMUTABLE);
 
-        Notification notification = new NotificationCompat.Builder(this, "stuff")
+        Notification notification = new NotificationCompat.Builder(this, "Tracker Channel")
                 .setContentTitle("Location Service")
                 .setContentText("Tracking location updates")
                 .setSmallIcon(R.drawable.ic_launcher_background)
                 .setContentIntent(pendingIntent)
+                .setOngoing(true)
                 .build();
 
+        notification.flags = Notification.FLAG_NO_CLEAR | Notification.FLAG_ONGOING_EVENT;
+
         Log.d("LocationTrackerService", "Starting foreground service");
-        startForeground(1, notification);
+        startForeground(100, notification);
 
         // Start location updates
         // ...
@@ -218,17 +227,19 @@ public class LocationTrackerService extends Service {
     }
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel serviceChannel = new NotificationChannel(
-                    "stuff",
-                    "Foreground Service Channel",
-                    NotificationManager.IMPORTANCE_DEFAULT
-            );
+            CharSequence name = "stuff";
+            String description = "Channel for Test Notifications";
+            int importance = NotificationManager.IMPORTANCE_HIGH;
+            NotificationChannel channel = new NotificationChannel("Tracker Channel", name, importance);
+            channel.setDescription(description);
 
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(serviceChannel);
+            NotificationChannel channel2 = new NotificationChannel("geofence_channel_id", "Geofence Channel", NotificationManager.IMPORTANCE_DEFAULT);
+            channel.setDescription(description);
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
+            notificationManager.createNotificationChannel(channel2);
         }
     }
-
     private void startLocationUpdates() {
         LocationRequest locationRequest = LocationRequest.create();
         locationRequest.setInterval(10000); // 10 seconds
@@ -264,10 +275,10 @@ public class LocationTrackerService extends Service {
 
 
 
-    public void startJourney(float speed) {
+    public void startJourney(float speed, float distance, long time) {
         isMoving = true;
         currentJourney = new Journey();
-        currentJourney.startTime = System.currentTimeMillis();
+        currentJourney.startTime = time;
         currentJourney.endTime = currentJourney.startTime;
         if(speed > CYCLE_THRESHOLD) {
             currentJourney.type = "Cycle";
@@ -281,6 +292,7 @@ public class LocationTrackerService extends Service {
         new Thread(() -> {
             long journeyId = db.journeyDao().insert(currentJourney);
             currentJourney.id = (int) journeyId;
+            recordLocation(lastLocation, distance);
 
         }).start();
     }

@@ -32,6 +32,7 @@ android {
     }
 }
 
+
 dependencies {
 
     implementation("androidx.appcompat:appcompat:1.6.1")
@@ -47,4 +48,6 @@ dependencies {
     implementation("androidx.work:work-runtime:2.9.0")
     implementation("com.google.code.gson:gson:2.9.0")
     implementation ("androidx.work:work-runtime-ktx:2.9.0")
+    implementation ("androidx.core:core:1.12.0")
+    implementation ("com.github.PhilJay:MPAndroidChart:v3.1.0")
 }

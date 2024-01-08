@@ -1,5 +1,6 @@
 package com.example.geotracker;
 
+import androidx.lifecycle.LiveData;
 import androidx.room.Dao;
 import androidx.room.Insert;
 import androidx.room.Query;
@@ -12,7 +13,10 @@ public interface LocationReminderDao {
     long insertReminder(LocationReminder reminder);
 
     @Query("SELECT * FROM LocationReminder")
-    List<LocationReminder> getAllReminders();
+    LiveData<List<LocationReminder>> getAllReminders();
+
+    @Query("SELECT * FROM LocationReminder")
+    List<LocationReminder> getAllRemindersSync();
 
     @Query("DELETE FROM LocationReminder WHERE id = :reminderId")
     void deleteById(int reminderId);
